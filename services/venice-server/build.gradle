@@ -1,6 +1,11 @@
 plugins {
   id 'application'
   id 'com.github.johnrengelman.shadow'
+  id 'net.ltgt.errorprone' version '4.1.0'
+}
+
+apply {
+  plugin 'net.ltgt.errorprone'
 }
 
 application {
@@ -63,6 +68,10 @@ dependencies {
   testImplementation libraries.fastUtil
   testImplementation project(':internal:alpini:router:alpini-router-api')
   testImplementation project(':services:venice-router')
+
+  implementation 'com.google.errorprone:error_prone_core:2.36.0'
+
+  errorprone 'com.google.errorprone:error_prone_core:2.36.0'
 }
 
 jar {
@@ -84,4 +93,8 @@ checkerFramework {
   checkers = ['org.checkerframework.checker.nullness.NullnessChecker']
   skipCheckerFramework = true
   excludeTests = true
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.errorprone.disableWarningsInGeneratedCode = true
 }

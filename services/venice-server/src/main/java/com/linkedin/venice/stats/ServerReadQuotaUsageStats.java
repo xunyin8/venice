@@ -1,5 +1,6 @@
 package com.linkedin.venice.stats;
 
+import com.google.errorprone.annotations.ThreadSafe;
 import com.linkedin.venice.utils.SystemTime;
 import com.linkedin.venice.utils.Time;
 import io.tehuti.metrics.MetricConfig;
@@ -22,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   2. VeniceVersionedStats is tracking current and future. However, for the purpose of quota we only care about
  *      current and backup.
  */
+@ThreadSafe
 public class ServerReadQuotaUsageStats extends AbstractVeniceStats {
   private final Sensor currentRequestedQPS; // requested query per second for current version
   private final Sensor backupRequestedQPS; // requested query per second for backup version
