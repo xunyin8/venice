@@ -3407,7 +3407,7 @@ public class LeaderFollowerStoreIngestionTask extends StoreIngestionTask {
       queueUpVersionTopicWritesWithViewWriters(
           partitionConsumptionState,
           (viewWriter, viewPartitionSet) -> viewWriter
-              .processRecord(newPut.putValue, keyBytes, newPut.schemaId, viewPartitionSet, newValueProvider),
+              .processRecord(newPut.putValue, keyBytes, newPut.schemaId, viewPartitionSet, newValueProvider, partition),
           viewPartitionMap,
           produceToVersionTopic);
     } else {

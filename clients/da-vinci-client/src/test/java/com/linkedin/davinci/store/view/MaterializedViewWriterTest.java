@@ -167,8 +167,8 @@ public class MaterializedViewWriterTest {
     Lazy<GenericRecord> valueProvider = mock(Lazy.class);
     Assert.assertThrows(
         VeniceException.class,
-        () -> materializedViewWriter.processRecord(null, keyBytes, 1, viewPartitionSet, valueProvider));
-    materializedViewWriter.processRecord(value, keyBytes, 1, viewPartitionSet, valueProvider);
+        () -> materializedViewWriter.processRecord(null, keyBytes, 1, viewPartitionSet, valueProvider, 0));
+    materializedViewWriter.processRecord(value, keyBytes, 1, viewPartitionSet, valueProvider, 0);
     verify(veniceWriter, times(1)).forwardPut(eq(keyBytes), eq(valueBytes), eq(1), eq(viewPartitionSet));
     verify(veniceWriter, never()).complexPut(any(), any(), anyInt(), any());
     verify(veniceWriter, never()).complexDelete(any(), any());

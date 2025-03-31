@@ -10,6 +10,7 @@ import com.linkedin.venice.meta.Version;
 import com.linkedin.venice.partitioner.VenicePartitioner;
 import com.linkedin.venice.pubsub.PubSubProducerAdapterFactory;
 import com.linkedin.venice.utils.ByteUtils;
+import com.linkedin.venice.utils.concurrent.VeniceConcurrentHashMap;
 import com.linkedin.venice.utils.lazy.Lazy;
 import com.linkedin.venice.views.MaterializedView;
 import com.linkedin.venice.writer.ComplexVeniceWriter;
@@ -22,6 +23,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 
 /**
@@ -30,10 +33,13 @@ import org.apache.avro.generic.GenericRecord;
  * This writer has its own {@link VeniceWriter}.
  */
 public class MaterializedViewWriter extends VeniceViewWriter {
+  private static final Logger LOGGER = LogManager.getLogger(MaterializedViewWriter.class);
   private final PubSubProducerAdapterFactory pubSubProducerAdapterFactory;
   private final MaterializedView internalView;
   private final String materializedViewTopicName;
   private Lazy<ComplexVeniceWriter> veniceWriter;
+  private final VeniceWriterFactory writerFactory;
+  private final Map<Integer, ComplexVeniceWriter> separateWriterMap;
 
   public MaterializedViewWriter(
       VeniceConfigLoader props,
@@ -46,9 +52,11 @@ public class MaterializedViewWriter extends VeniceViewWriter {
         new MaterializedView(props.getCombinedProperties().toProperties(), version.getStoreName(), extraViewParameters);
     materializedViewTopicName =
         internalView.getTopicNamesAndConfigsForVersion(version.getNumber()).keySet().stream().findAny().get();
-    this.veniceWriter = Lazy.of(
-        () -> new VeniceWriterFactory(props.getCombinedProperties().toProperties(), pubSubProducerAdapterFactory, null)
-            .createComplexVeniceWriter(buildWriterOptions()));
+    writerFactory =
+        new VeniceWriterFactory(props.getCombinedProperties().toProperties(), pubSubProducerAdapterFactory, null);
+    this.veniceWriter = Lazy.of(() -> writerFactory.createComplexVeniceWriter(buildWriterOptions()));
+    separateWriterMap = new VeniceConcurrentHashMap<>();
+    LOGGER.info("xyin frankenwar initialized MaterializedViewWriter");
   }
 
   /**
@@ -66,8 +74,9 @@ public class MaterializedViewWriter extends VeniceViewWriter {
       int newValueSchemaId,
       int oldValueSchemaId,
       GenericRecord replicationMetadataRecord,
-      Lazy<GenericRecord> valueProvider) {
-    return processRecord(newValue, key, newValueSchemaId, null, valueProvider);
+      Lazy<GenericRecord> valueProvider,
+      int sourcePartition) {
+    return processRecord(newValue, key, newValueSchemaId, null, valueProvider, sourcePartition);
   }
 
   /**
@@ -80,7 +89,10 @@ public class MaterializedViewWriter extends VeniceViewWriter {
       byte[] key,
       int newValueSchemaId,
       Set<Integer> viewPartitionSet,
-      Lazy<GenericRecord> newValueProvider) {
+      Lazy<GenericRecord> newValueProvider,
+      int sourcePartition) {
+    ComplexVeniceWriter writer = separateWriterMap
+        .computeIfAbsent(sourcePartition, (p) -> writerFactory.createComplexVeniceWriter(buildWriterOptions()));
     byte[] newValueBytes = newValue == null ? null : ByteUtils.extractByteArray(newValue);
     if (viewPartitionSet != null) {
       if (newValue == null) {
@@ -88,15 +100,16 @@ public class MaterializedViewWriter extends VeniceViewWriter {
         throw new VeniceException(
             "Encountered a null PUT record while having view partition map in the message header");
       }
+      return writer.forwardPut(key, newValueBytes, newValueSchemaId, viewPartitionSet);
       // Forward the record to corresponding view partition without any processing (NR pass-through mode).
-      return veniceWriter.get().forwardPut(key, newValueBytes, newValueSchemaId, viewPartitionSet);
+      // return veniceWriter.get().forwardPut(key, newValueBytes, newValueSchemaId, viewPartitionSet);
     }
     if (newValue == null) {
       // This is a delete operation. newValueProvider will contain the old value in a best effort manner. The old value
       // might not be available if we are deleting a non-existing key.
-      return veniceWriter.get().complexDelete(key, newValueProvider);
+      return writer.complexDelete(key, newValueProvider);
     }
-    return veniceWriter.get().complexPut(key, newValueBytes, newValueSchemaId, newValueProvider);
+    return writer.complexPut(key, newValueBytes, newValueSchemaId, newValueProvider);
   }
 
   @Override

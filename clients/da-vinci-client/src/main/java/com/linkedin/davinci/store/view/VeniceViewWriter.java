@@ -80,7 +80,8 @@ public abstract class VeniceViewWriter extends VeniceView {
       int newValueSchemaId,
       int oldValueSchemaId,
       GenericRecord replicationMetadataRecord,
-      Lazy<GenericRecord> valueProvider);
+      Lazy<GenericRecord> valueProvider,
+      int sourcePartition);
 
   /**
    * To be called as a given ingestion task consumes each record. This is called prior to writing to a
@@ -100,7 +101,8 @@ public abstract class VeniceViewWriter extends VeniceView {
       byte[] key,
       int newValueSchemaId,
       Set<Integer> viewPartitionSet,
-      Lazy<GenericRecord> newValueProvider);
+      Lazy<GenericRecord> newValueProvider,
+      int sourcePartition);
 
   public abstract ViewWriterType getViewWriterType();
 

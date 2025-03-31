@@ -688,7 +688,8 @@ public class ActiveActiveStoreIngestionTask extends LeaderFollowerStoreIngestion
                 mergeConflictResult.getValueSchemaId(),
                 oldValueSchemaId,
                 mergeConflictResult.getRmdRecord(),
-                valueProvider),
+                valueProvider,
+                partition),
             null,
             produceToVersionTopic);
       } else {

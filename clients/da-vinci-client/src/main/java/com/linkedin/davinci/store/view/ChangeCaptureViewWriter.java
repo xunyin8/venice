@@ -67,7 +67,8 @@ public class ChangeCaptureViewWriter extends VeniceViewWriter {
       int newValueSchemaId,
       int oldValueSchemaId,
       GenericRecord replicationMetadataRecord,
-      Lazy<GenericRecord> valueProvider) {
+      Lazy<GenericRecord> valueProvider,
+      int sourcePartition) {
     // TODO: not sold about having currentValue in the interface but it VASTLY simplifies a lot of things with regards
     // to dealing with compression/chunking/etc. in the storage layer.
 
@@ -90,7 +91,8 @@ public class ChangeCaptureViewWriter extends VeniceViewWriter {
       byte[] key,
       int newValueSchemaId,
       Set<Integer> viewPartitionSet,
-      Lazy<GenericRecord> newValueProvider) {
+      Lazy<GenericRecord> newValueProvider,
+      int sourcePartition) {
     // No op
     return CompletableFuture.completedFuture(null);
   }
