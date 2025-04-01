@@ -2,6 +2,7 @@ package com.linkedin.davinci.store.view;
 
 import com.linkedin.davinci.config.VeniceConfigLoader;
 import com.linkedin.davinci.kafka.consumer.PartitionConsumptionState;
+import com.linkedin.davinci.stats.HostLevelIngestionStats;
 import com.linkedin.venice.exceptions.VeniceException;
 import com.linkedin.venice.kafka.protocol.ControlMessage;
 import com.linkedin.venice.kafka.protocol.KafkaMessageEnvelope;
@@ -20,8 +21,11 @@ import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 
 /**
@@ -30,10 +34,16 @@ import org.apache.avro.generic.GenericRecord;
  * This writer has its own {@link VeniceWriter}.
  */
 public class MaterializedViewWriter extends VeniceViewWriter {
+  private static final Logger LOGGER = LogManager.getLogger(MaterializedViewWriter.class);
+  private static final Consumer<Long> NO_OP_STATS_CONSUMER = (ignored) -> {};
   private final PubSubProducerAdapterFactory pubSubProducerAdapterFactory;
   private final MaterializedView internalView;
   private final String materializedViewTopicName;
   private Lazy<ComplexVeniceWriter> veniceWriter;
+  private HostLevelIngestionStats stats;
+  private Consumer<Long> totalLatencyConsumer;
+  private Consumer<Long> preSendLatencyConsumer;
+  private Consumer<Long> sendMessageLatencyConsumer;
 
   public MaterializedViewWriter(
       VeniceConfigLoader props,
@@ -49,6 +59,7 @@ public class MaterializedViewWriter extends VeniceViewWriter {
     this.veniceWriter = Lazy.of(
         () -> new VeniceWriterFactory(props.getCombinedProperties().toProperties(), pubSubProducerAdapterFactory, null)
             .createComplexVeniceWriter(buildWriterOptions()));
+    LOGGER.info("xyin frankenwar initialized MaterializedViewWriter with forwardPut stats");
   }
 
   /**
@@ -56,6 +67,13 @@ public class MaterializedViewWriter extends VeniceViewWriter {
    */
   void setVeniceWriter(ComplexVeniceWriter veniceWriter) {
     this.veniceWriter = Lazy.of(() -> veniceWriter);
+  }
+
+  public void setIngestionStats(HostLevelIngestionStats stats) {
+    this.stats = stats;
+    totalLatencyConsumer = stats::recordForwardPutTotalLatency;
+    preSendLatencyConsumer = stats::recordForwardPutPreSendProcessingLatency;
+    sendMessageLatencyConsumer = stats::recordForwardPutSendMessageLatency;
   }
 
   @Override
@@ -89,7 +107,27 @@ public class MaterializedViewWriter extends VeniceViewWriter {
             "Encountered a null PUT record while having view partition map in the message header");
       }
       // Forward the record to corresponding view partition without any processing (NR pass-through mode).
-      return veniceWriter.get().forwardPut(key, newValueBytes, newValueSchemaId, viewPartitionSet);
+      if (stats == null) {
+        return veniceWriter.get()
+            .forwardPut(
+                key,
+                newValueBytes,
+                newValueSchemaId,
+                viewPartitionSet,
+                NO_OP_STATS_CONSUMER,
+                NO_OP_STATS_CONSUMER,
+                NO_OP_STATS_CONSUMER);
+      } else {
+        return veniceWriter.get()
+            .forwardPut(
+                key,
+                newValueBytes,
+                newValueSchemaId,
+                viewPartitionSet,
+                totalLatencyConsumer,
+                preSendLatencyConsumer,
+                sendMessageLatencyConsumer);
+      }
     }
     if (newValue == null) {
       // This is a delete operation. newValueProvider will contain the old value in a best effort manner. The old value

@@ -68,6 +68,9 @@ public class HostLevelIngestionStats extends AbstractVeniceStats {
 
   private final Sensor viewProducerLatencySensor;
   private final Sensor viewProducerAckLatencySensor;
+  private final Sensor forwardPutTotalLatencySensor;
+  private final Sensor forwardPutPreSendProcessingLatencySensor;
+  private final Sensor forwardPutSendMessageLatencySensor;
   /**
    * Sensors for emitting if/when we detect DCR violations (such as a backwards timestamp or receding offset vector)
    */
@@ -318,6 +321,24 @@ public class HostLevelIngestionStats extends AbstractVeniceStats {
         () -> totalStats.viewProducerAckLatencySensor,
         avgAndMax());
 
+    this.forwardPutTotalLatencySensor = registerPerStoreAndTotalSensor(
+        "forward_put_total_latency",
+        totalStats,
+        () -> totalStats.forwardPutTotalLatencySensor,
+        avgAndMax());
+
+    this.forwardPutPreSendProcessingLatencySensor = registerPerStoreAndTotalSensor(
+        "forward_put_pre_send_processing_latency",
+        totalStats,
+        () -> totalStats.forwardPutPreSendProcessingLatencySensor,
+        avgAndMax());
+
+    this.forwardPutSendMessageLatencySensor = registerPerStoreAndTotalSensor(
+        "forward_put_send_message_latency",
+        totalStats,
+        () -> totalStats.forwardPutSendMessageLatencySensor,
+        avgAndMax());
+
     registerSensor(
         "storage_quota_used",
         new AsyncGauge((ignored, ignored2) -> hybridQuotaUsageGauge, "storage_quota_used"));
@@ -522,6 +543,18 @@ public class HostLevelIngestionStats extends AbstractVeniceStats {
 
   public void recordViewProducerAckLatency(double latency) {
     viewProducerAckLatencySensor.record(latency);
+  }
+
+  public void recordForwardPutTotalLatency(double latency) {
+    forwardPutTotalLatencySensor.record(latency);
+  }
+
+  public void recordForwardPutPreSendProcessingLatency(double latency) {
+    forwardPutPreSendProcessingLatencySensor.record(latency);
+  }
+
+  public void recordForwardPutSendMessageLatency(double latency) {
+    forwardPutSendMessageLatencySensor.record(latency);
   }
 
   public void recordUnexpectedMessage() {

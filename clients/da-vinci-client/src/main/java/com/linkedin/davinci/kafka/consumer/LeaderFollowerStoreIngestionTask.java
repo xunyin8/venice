@@ -357,7 +357,9 @@ public class LeaderFollowerStoreIngestionTask extends StoreIngestionTask {
         if (viewWriter.getValue() instanceof ChangeCaptureViewWriter) {
           tmpValueForHasChangeCaptureViewWriter = true;
         } else if (viewWriter.getValue().getViewWriterType() == VeniceViewWriter.ViewWriterType.MATERIALIZED_VIEW) {
-          if (((MaterializedViewWriter) viewWriter.getValue()).isComplexVenicePartitioner()) {
+          MaterializedViewWriter materializedViewWriter = (MaterializedViewWriter) viewWriter.getValue();
+          materializedViewWriter.setIngestionStats(hostLevelIngestionStats);
+          if (materializedViewWriter.isComplexVenicePartitioner()) {
             tmpValueForHasComplexVenicePartitioner = true;
           }
         }

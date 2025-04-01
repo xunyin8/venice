@@ -10,6 +10,7 @@ import com.linkedin.venice.pubsub.api.PubSubProduceResult;
 import com.linkedin.venice.pubsub.api.PubSubProducerAdapter;
 import com.linkedin.venice.pubsub.api.PubSubProducerCallback;
 import com.linkedin.venice.storage.protocol.ChunkedValueManifest;
+import com.linkedin.venice.utils.LatencyUtils;
 import com.linkedin.venice.utils.VeniceProperties;
 import com.linkedin.venice.utils.lazy.Lazy;
 import com.linkedin.venice.views.VeniceView;
@@ -106,16 +107,25 @@ public class ComplexVeniceWriter<K, V, U> extends VeniceWriter<K, V, U> {
    * This is a valid use case since certain complex partitioner implementation could filter out records based on value
    * fields and return an empty partition.
    */
-  public CompletableFuture<Void> forwardPut(K key, V value, int valueSchemaId, Set<Integer> partitions) {
+  public CompletableFuture<Void> forwardPut(
+      K key,
+      V value,
+      int valueSchemaId,
+      Set<Integer> partitions,
+      Consumer<Long> totalTime,
+      Consumer<Long> preSendProcessingTime,
+      Consumer<Long> sendMessageLatency) {
     if (partitions.isEmpty()) {
       return CompletableFuture.completedFuture(null);
     }
+    long preProcessingTime = System.currentTimeMillis();
     byte[] serializedKey = keySerializer.serialize(topicName, key);
     byte[] serializedValue = valueSerializer.serialize(topicName, value);
     KafkaKey kafkaKey = new KafkaKey(MessageType.PUT, serializedKey);
     Put putPayload = buildPutPayload(serializedValue, valueSchemaId, null);
     int[] partitionArray = partitions.stream().mapToInt(i -> i).toArray();
     CompletableFuture<Void> finalCompletableFuture = new CompletableFuture<>();
+    preSendProcessingTime.accept(LatencyUtils.getElapsedTimeFromMsToMs(preProcessingTime));
     performMultiPartitionAction(
         partitionArray,
         finalCompletableFuture,
@@ -126,7 +136,9 @@ public class ComplexVeniceWriter<K, V, U> extends VeniceWriter<K, V, U> {
             partition,
             null,
             DEFAULT_LEADER_METADATA_WRAPPER,
-            APP_DEFAULT_LOGICAL_TS));
+            APP_DEFAULT_LOGICAL_TS),
+        sendMessageLatency);
+    totalTime.accept(LatencyUtils.getElapsedTimeFromMsToMs(preProcessingTime));
     return finalCompletableFuture;
   }
 
@@ -260,6 +272,27 @@ public class ComplexVeniceWriter<K, V, U> extends VeniceWriter<K, V, U> {
     int index = 0;
     for (int p: partitions) {
       partitionFutures[index++] = action.apply(p);
+    }
+    CompletableFuture.allOf(partitionFutures).whenCompleteAsync((ignored, writeException) -> {
+      if (writeException == null) {
+        finalCompletableFuture.complete(null);
+      } else {
+        finalCompletableFuture.completeExceptionally(writeException);
+      }
+    });
+  }
+
+  private void performMultiPartitionAction(
+      int[] partitions,
+      CompletableFuture<Void> finalCompletableFuture,
+      Function<Integer, CompletableFuture<PubSubProduceResult>> action,
+      Consumer<Long> actionLatency) {
+    CompletableFuture<PubSubProduceResult>[] partitionFutures = new CompletableFuture[partitions.length];
+    int index = 0;
+    for (int p: partitions) {
+      long preActionTime = System.currentTimeMillis();
+      partitionFutures[index++] = action.apply(p);
+      actionLatency.accept(LatencyUtils.getElapsedTimeFromMsToMs(preActionTime));
     }
     CompletableFuture.allOf(partitionFutures).whenCompleteAsync((ignored, writeException) -> {
       if (writeException == null) {

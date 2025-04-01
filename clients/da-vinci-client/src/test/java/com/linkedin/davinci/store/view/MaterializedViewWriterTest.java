@@ -156,7 +156,8 @@ public class MaterializedViewWriterTest {
     VeniceConfigLoader props = getMockProps();
     MaterializedViewWriter materializedViewWriter = new MaterializedViewWriter(props, version, SCHEMA, viewParamsMap);
     ComplexVeniceWriter veniceWriter = mock(ComplexVeniceWriter.class);
-    doReturn(CompletableFuture.completedFuture(null)).when(veniceWriter).forwardPut(any(), any(), anyInt(), any());
+    doReturn(CompletableFuture.completedFuture(null)).when(veniceWriter)
+        .forwardPut(any(), any(), anyInt(), any(), any(), any(), any());
     materializedViewWriter.setVeniceWriter(veniceWriter);
     byte[] keyBytes = new byte[5];
     byte[] valueBytes = new byte[10];
@@ -169,7 +170,8 @@ public class MaterializedViewWriterTest {
         VeniceException.class,
         () -> materializedViewWriter.processRecord(null, keyBytes, 1, viewPartitionSet, valueProvider));
     materializedViewWriter.processRecord(value, keyBytes, 1, viewPartitionSet, valueProvider);
-    verify(veniceWriter, times(1)).forwardPut(eq(keyBytes), eq(valueBytes), eq(1), eq(viewPartitionSet));
+    verify(veniceWriter, times(1))
+        .forwardPut(eq(keyBytes), eq(valueBytes), eq(1), eq(viewPartitionSet), any(), any(), any());
     verify(veniceWriter, never()).complexPut(any(), any(), anyInt(), any());
     verify(veniceWriter, never()).complexDelete(any(), any());
   }
